@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Extractor</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 2em auto; }
+    input, button { padding: .5em; font-size: 1em; }
+    #url-input { width: 70%; }
+    #copy-btn { margin-bottom: 1em; }
+    ul { list-style: none; padding-left: 0; }
+    li + li { margin-top: .3em; }
+    a { word-break: break-all; color: #06c; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <h1>Image Extractor</h1>
+  <form id="extract-form">
+    <input type="url" id="url-input" placeholder="Enter webpage URL" required>
+    <button type="submit">Extract Images</button>
+  </form>
+
+  <div id="results"></div>
+
+  <script>
+  (function(){
+    const form    = document.getElementById('extract-form'),
+          input   = document.getElementById('url-input'),
+          output  = document.getElementById('results'),
+          // AllOrigins “raw” endpoint:
+          proxy   = 'https://api.allorigins.win/raw?url=';
+
+    form.addEventListener('submit', async function(e){
+      e.preventDefault();
+      output.innerHTML = '<p>Fetching…</p>';
+
+      const target = input.value.trim();
+      if (!target) return;
+
+      try {
+        const res  = await fetch(proxy + encodeURIComponent(target));
+        if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+        const html = await res.text();
+
+        // Parse and extract <img> 
+        const doc    = new DOMParser().parseFromString(html, 'text/html'),
+              images = Array.from(doc.images),
+              set     = new Set();
+
+        images.forEach(img => {
+          let src = img.getAttribute('src') || '';
+          try {
+            // Resolve relative → absolute
+            const url = new URL(src, target);
+            set.add(url.href);
+          } catch(_){}
+        });
+
+        const list = Array.from(set);
+        if (!list.length) {
+          output.innerHTML = '<p>No images found.</p>';
+          return;
+        }
+
+        // Render “Copy All” button
+        output.innerHTML = '';
+        const copyBtn = document.createElement('button');
+        copyBtn.textContent = 'Copy All';
+        copyBtn.id = 'copy-btn';
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(list.join('\n'))
+            .then(()=> copyBtn.textContent = 'Copied!')
+            .catch(()=> copyBtn.textContent = 'Failed');
+          setTimeout(()=> copyBtn.textContent = 'Copy All', 2000);
+        };
+        output.appendChild(copyBtn);
+
+        // Render list
+        const ul = document.createElement('ul');
+        list.forEach(u=>{
+          const li = document.createElement('li'),
+                a  = document.createElement('a');
+          a.href = u; a.target = '_blank'; a.textContent = u;
+          li.appendChild(a);
+          ul.appendChild(li);
+        });
+        output.appendChild(ul);
+
+      } catch(err) {
+        output.innerHTML = `<p style="color:red;">Error: ${err.message}</p>`;
+      }
+    });
+  })();
+  </script>
+
+</body>
+</html>
